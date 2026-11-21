@@ -1,0 +1,4 @@
+{
+  "description": "Agents whose sessions are saved by agent-memory hooks. The Elephant kit ships no memory hooks.",
+  "agents": []
+}
