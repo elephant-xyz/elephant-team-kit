@@ -67,6 +67,20 @@ payload is unchanged.
    - Fail closed when tenant, CaseId, permit number, source URL, parcel evidence, pagination
      totals, or contact-page limits disagree. Keep a contractor name even when license or
      company matching is unavailable; never force an ambiguous company link.
+5. **Socrata open data** (`socrata.mjs`; first used for City of Los Angeles LADBS):
+   - When a city publishes permits as Socrata datasets, download them in bulk (SODA paging
+     in `:id` order, checkpointed per page) instead of per-parcel scraping. LADBS: three
+     datasets, 1.6M rows in ~7 minutes.
+   - Reconcile `count(*)` against rows received per dataset; refuse completion if any
+     dataset's `rowsUpdatedAt` changes mid-download (`socrata_source_drift`).
+   - Link only full, non-placeholder parcel ids (`parcelPattern`, `placeholderParcelPattern`);
+     partial (`DDDDDDD***`) and placeholder (`9999999999`) APNs stay unlinked, never guessed.
+   - Use a status date as the final-inspection date only when the status itself says final
+     (`finaledStatusPattern`). A negative valuation is null, with the raw value kept.
+   - `bin/ladbs-permit-download.mjs`, `bin/ladbs-permit-link-check.mjs` and
+     `bin/ladbs-permit-lexicon.py` are the LA download, seed reconciliation and
+     Property Improvement builder (Seed copied byte-for-byte so property CIDs match the
+     published county archive).
 
 ### Distributed Cloud Scraper Architecture (AWS Lambda)
 
