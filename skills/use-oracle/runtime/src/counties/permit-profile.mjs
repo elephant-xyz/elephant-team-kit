@@ -13,6 +13,7 @@ export const PERMIT_ADAPTER_KEYS = Object.freeze([
   "coconut-creek-status",
   "jaxepics",
   "smartgov",
+  "socrata",
   "tyler-civic-access",
   "tyler-esuite",
 ]);

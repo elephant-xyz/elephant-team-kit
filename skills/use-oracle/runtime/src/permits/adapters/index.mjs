@@ -6,6 +6,7 @@ import { createCitizenserveAdapter } from "./citizenserve.mjs";
 import { createCoconutCreekStatusAdapter } from "./coconut-creek-status.mjs";
 import { createJaxEpicsAdapter } from "./jaxepics.mjs";
 import { createSmartGovAdapter } from "./smartgov.mjs";
+import { createSocrataAdapter } from "./socrata.mjs";
 import { createTylerCivicAccessAdapter } from "./tyler-civic-access.mjs";
 import { createTylerEsuiteAdapter } from "./tyler-esuite.mjs";
 
@@ -18,6 +19,7 @@ const adapterFactories = Object.freeze({
   "coconut-creek-status": createCoconutCreekStatusAdapter,
   jaxepics: createJaxEpicsAdapter,
   smartgov: createSmartGovAdapter,
+  socrata: createSocrataAdapter,
   "tyler-civic-access": createTylerCivicAccessAdapter,
   "tyler-esuite": createTylerEsuiteAdapter,
 });
