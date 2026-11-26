@@ -257,3 +257,33 @@ describe("mecklenburg", () => {
     ]);
   });
 });
+
+describe("acclaim doc-type listing", () => {
+  const profile = { county: "duval", state: "FL", requestIdentifierPrefix: "duval-or", baseUrl: "https://or.example" };
+  const gridRow = (date, n) => ({
+    TransactionItemId: n, InstrumentNumber: String(2026000000 + n), RecordDate: `${date} 08:00:00`,
+    DocTypeDescription: "MORTGAGE", BookType: "OR", BookPage: "21492/1360", NumberOfPages: 9,
+    DirectName: "DOE JANE", IndirectName: "EXAMPLE BANK N A", Consideration: "$255,000.00",
+    DocLegalDescription: "L 1 EXAMPLE",
+  });
+  const fake = (searchHtml, data) => async (url, init) => {
+    if (url.includes("/search/Disclaimer")) return new Response("", { status: 302, headers: { location: "/search/SearchTypeDocType", "set-cookie": "s=1; path=/" } });
+    if (url.includes("/search/SearchTypeDocType")) return new Response(searchHtml, { status: 200 });
+    return json({ Data: data, Total: data.length });
+  };
+
+  it("lists a window and normalizes rows", async () => {
+    const { acclaimDocTypeFetcher } = await import("../src/mortgage/acclaim.mjs");
+    const result = await acclaimDocTypeFetcher({ baseUrl: profile.baseUrl, docTypeIds: [110], profile, fetchImpl: fake("<html>ok</html>", [gridRow("2026/11/02", 1)]) })("20261102", "20261102");
+    expect(result).toMatchObject({ complete: true, expected: 1 });
+    expect(result.records[0]).toMatchObject({ requestIdentifier: "duval-or:2026000001", recordDate: "2026-11-02", consideration: 255000, grantees: ["EXAMPLE BANK N A"] });
+  });
+
+  it("treats the max-limit message and stale rows as truncated", async () => {
+    const { acclaimDocTypeFetcher } = await import("../src/mortgage/acclaim.mjs");
+    const over = await acclaimDocTypeFetcher({ baseUrl: profile.baseUrl, docTypeIds: [110], profile, fetchImpl: fake("ShowError(' The number of results exceeded the maximum limit')", [gridRow("2026/11/02", 1)]) })("20250101", "20251231");
+    expect(over.complete).toBe(false);
+    const stale = await acclaimDocTypeFetcher({ baseUrl: profile.baseUrl, docTypeIds: [110], profile, fetchImpl: fake("<html>ok</html>", [gridRow("2026/11/02", 1)]) })("20250101", "20250131");
+    expect(stale.complete).toBe(false);
+  });
+});

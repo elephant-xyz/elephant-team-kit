@@ -21,6 +21,8 @@
  *   bookType?: string,
  *   requestIdentifierPrefix: string,
  *   mortgageDocTypeCodes: readonly string[],
+ *   extraMortgageDocTypeCodes?: readonly string[],
+ *   acclaimDocTypeIds?: readonly number[],
  *   verifiedAt: string,
  *   notes: string,
  * }} MortgageProfile
@@ -31,7 +33,7 @@
  * @param {string} name - Display name.
  * @returns {MortgageProfile} Texas publicsearch.us profile.
  */
-function texasPublicsearch(county, name) {
+function texasPublicsearch(county, name, extra = []) {
   return Object.freeze({
     county,
     state: "TX",
@@ -41,6 +43,9 @@ function texasPublicsearch(county, name) {
     requestIdentifierPrefix: `${county}-or`,
     // DT = DEED OF TRUST, the Texas mortgage instrument.
     mortgageDocTypeCodes: Object.freeze(["DT"]),
+    // Other new-loan instrument codes seen in the county's own doc-type counts (2026-11-26).
+    // Modifications (MODT), releases and trustee deeds are deliberately excluded.
+    extraMortgageDocTypeCodes: Object.freeze(extra),
     verifiedAt: "2026-11-26",
     notes: `${name} County Clerk on Neumo publicsearch.us. Cloudflare non-interactive check; data over the same-origin WebSocket. Index has no loan amount ($0.00 consideration); the amount is in the document image.`,
   });
@@ -57,15 +62,23 @@ export const MORTGAGE_PROFILES = Object.freeze({
     requestIdentifierPrefix: "duval-or",
     // MTGTF = "TAX FREE MORTGAGE" (Florida intangible/doc-stamp exempt), seen in the pilot.
     mortgageDocTypeCodes: Object.freeze(["MTG", "MTGTF"]),
+    // Other mortgage codes with their Acclaim doc-type ids (MTGCU 111, EMTG 93, MTGG 112, MTGND 155, MTGNI 113).
+    extraMortgageDocTypeCodes: Object.freeze(["MTGCU", "EMTG", "MTGG", "MTGND", "MTGNI"]),
+    // Acclaim doc-type ids for the listing search: MTG 110, MTGTF 114, MTGCU 111, EMTG 93,
+    // MTGG 112, MTGND 155, MTGNI 113. Releases (SAT 129, SATNF 130, RELEASE 126,
+    // PTL REL 125) are known but not harvested until that decision is made.
+    acclaimDocTypeIds: Object.freeze([110, 114, 111, 93, 112, 155, 113]),
+    defaultWindow: "month",
     verifiedAt: "2026-11-26",
     notes:
       "Acclaim portal. Disclaimer acceptance required per session. The whole-document PDF is scanned images (no text layer) and took about 52 s for 21 pages. US hosting egress timed out until the operator changed networks.",
   }),
-  bexar: texasPublicsearch("bexar", "Bexar"),
+  bexar: texasPublicsearch("bexar", "Bexar", ["MORTG", "M MORTG"]),
   collin: texasPublicsearch("collin", "Collin"),
-  dallas: texasPublicsearch("dallas", "Dallas"),
-  denton: texasPublicsearch("denton", "Denton"),
-  tarrant: texasPublicsearch("tarrant", "Tarrant"),
+  dallas: texasPublicsearch("dallas", "Dallas", ["CORR DT", "D/T & ASGMT", "MTG", "MDT", "MORTGAGE"]),
+  denton: texasPublicsearch("denton", "Denton", ["MTG", "MDT", "ASSUMED MORTGAG", "COLLATERAL MTG", "AMENDED MORTGAG"]),
+  // DTU in Tarrant is UCC filings, not deeds of trust.
+  tarrant: texasPublicsearch("tarrant", "Tarrant", ["MDT"]),
   hillsborough: Object.freeze({
     county: "hillsborough",
     state: "FL",

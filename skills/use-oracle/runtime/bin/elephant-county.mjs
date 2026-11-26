@@ -47,6 +47,7 @@ import {
   parseInstrumentList,
 } from "../src/mortgage/harvest.mjs";
 import { pinConfigFromEnv } from "../src/mortgage/ipfs-pin.mjs";
+import { acclaimDocTypeFetcher } from "../src/mortgage/acclaim.mjs";
 import { calendarWindows, harvestWindows } from "../src/mortgage/windowed-harvest.mjs";
 import { hillsboroughFetcher } from "../src/mortgage/hillsborough.mjs";
 import { maricopaFetcher } from "../src/mortgage/maricopa.mjs";
@@ -955,8 +956,19 @@ async function runMortgageHarvestCommand(argv) {
  * @returns {Promise<void>} Resolves when the manifest is written.
  */
 async function runMortgageIndexHarvestCommand(argv) {
-  const flags = parseFlags(argv, ["headless"]);
-  const profile = requireMortgageProfile(requireStringFlag(flags, "county"));
+  const flags = parseFlags(argv, ["headless", "extra-doc-types"]);
+  let profile = requireMortgageProfile(requireStringFlag(flags, "county"));
+  // --doc-types A,B overrides the codes; --extra-doc-types harvests only the profile's extra codes.
+  const docTypes =
+    typeof flags["doc-types"] === "string"
+      ? flags["doc-types"].split(",").map((code) => code.trim()).filter(Boolean)
+      : flags["extra-doc-types"]
+        ? [...(profile.extraMortgageDocTypeCodes ?? [])]
+        : null;
+  if (docTypes) {
+    if (docTypes.length === 0) throw new Error(`${profile.county} has no extra mortgage doc types`);
+    profile = { ...profile, mortgageDocTypeCodes: docTypes };
+  }
   if (profile.vendor !== "publicsearch" || !profile.host) {
     throw new Error(`mortgage-index-harvest supports publicsearch counties; ${profile.county} is ${profile.vendor}`);
   }
@@ -1004,6 +1016,8 @@ async function runMortgageWindowHarvestCommand(argv) {
     "hillsclerk-ori": () => hillsboroughFetcher(),
     "maricopa-recorder-api": () => maricopaFetcher({ withNames: Boolean(flags["with-names"]) }),
     "harris-cclerk-rp": () => harrisFetcher(),
+    acclaim: () =>
+      acclaimDocTypeFetcher({ baseUrl: profile.baseUrl, docTypeIds: profile.acclaimDocTypeIds ?? [], profile }),
   };
   let closeSession = async () => {};
   if (profile.vendor === "aumentum-recorder") {
@@ -1032,7 +1046,7 @@ async function runMortgageWindowHarvestCommand(argv) {
     fetchWindow: makeFetcher(),
     // Older records can share an instrument number; prefer the portal's own record id.
     keyOf: (record) =>
-      String(record.source?.globalId ?? record.source?.uuid ?? record.instrumentNumber),
+      String(record.source?.globalId ?? record.source?.uuid ?? record.source?.transactionItemId ?? record.instrumentNumber),
     delayMs,
     onProgress: (event) => console.log(JSON.stringify(event)),
   }).finally(closeSession);
@@ -1110,8 +1124,8 @@ async function main() {
       "  permit-export --county <profile-key> --job-id <id> --harvest <dir> --input-parquet <parquet> --input-coverage <json> --output <dir>\n" +
       "  permit-bulk-export --county <profile-key> --job-id <id> --input-parquet <parquet> --input-coverage <json> --output <dir> [--max-pages N]\n" +
       "  mortgage-harvest --county <mortgage-profile-key> --job-id <id> --instruments <csv> --limit N --output <dir> [--delay-ms N] [--pin]\n" +
-      "  mortgage-index-harvest --county <bexar|collin|dallas|denton|tarrant> --job-id <id> --from <YYYYMMDD> --to <YYYYMMDD> --output <dir> [--chrome <path>] [--headless] [--page-size N] [--delay-ms N]\n" +
-      "  mortgage-window-harvest --county <hillsborough|maricopa|harris|mecklenburg> --job-id <id> --to <YYYYMMDD> --output <dir> [--from <YYYYMMDD>] [--window day|month|year] [--delay-ms N] [--with-names] [--chrome <path>]",
+      "  mortgage-index-harvest --county <bexar|collin|dallas|denton|tarrant> --job-id <id> --from <YYYYMMDD> --to <YYYYMMDD> --output <dir> [--chrome <path>] [--headless] [--page-size N] [--delay-ms N] [--doc-types A,B | --extra-doc-types]\n" +
+      "  mortgage-window-harvest --county <duval|hillsborough|maricopa|harris|mecklenburg> --job-id <id> --to <YYYYMMDD> --output <dir> [--from <YYYYMMDD>] [--window day|month|year] [--delay-ms N] [--with-names] [--chrome <path>]",
   );
   process.exitCode = 1;
 }

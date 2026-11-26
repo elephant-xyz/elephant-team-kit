@@ -292,3 +292,120 @@ export function createAcclaimSession(options) {
 
   return { acceptDisclaimer, fetchDetails, fetchDocumentPdf };
 }
+
+/**
+ * Normalize one Acclaim GridResults row into the mortgage index shape.
+ *
+ * @param {Record<string, any>} row - GridResults Data entry.
+ * @param {{ county: string, state: string, requestIdentifierPrefix: string, baseUrl: string }} profile
+ * @param {string} capturedAt - ISO timestamp.
+ * @returns {Record<string, unknown>} Mortgage index record.
+ */
+export function normalizeAcclaimGridRow(row, profile, capturedAt) {
+  const date = /^(\d{4})\/(\d{2})\/(\d{2})/.exec(row.RecordDate ?? "");
+  const [book, page] = String(row.BookPage ?? "").split("/");
+  const instrument = String(row.InstrumentNumber ?? "").trim();
+  return {
+    schemaVersion: "elephant.mortgage-index.v1",
+    county: profile.county,
+    state: profile.state,
+    requestIdentifier: `${profile.requestIdentifierPrefix}:${instrument}`,
+    instrumentNumber: instrument,
+    recordDate: date ? `${date[1]}-${date[2]}-${date[3]}` : null,
+    book: book?.trim() || null,
+    page: page?.trim() || null,
+    bookType: row.BookType ?? null,
+    pageCount: Number.isInteger(row.NumberOfPages) ? row.NumberOfPages : null,
+    docType: row.DocTypeDescription ?? null,
+    // The grid shows the first party on each side; the detail page lists all of them.
+    grantors: row.DirectName ? [row.DirectName] : [],
+    grantees: row.IndirectName ? [row.IndirectName] : [],
+    consideration: parseAcclaimAmount(String(row.Consideration ?? "")),
+    legalDescriptions: row.DocLegalDescription ? [row.DocLegalDescription] : [],
+    source: {
+      vendor: "acclaim",
+      transactionItemId: row.TransactionItemId ?? null,
+      detailUrl: `${profile.baseUrl}/Details/GetDocumentByInstrumentNumber/${row.BookType ?? "OR"}/${instrument}`,
+      capturedAt,
+    },
+  };
+}
+
+/**
+ * List every mortgage recorded in a window by document type (Acclaim Doc Type search).
+ *
+ * Verified 2026-11-26 on Duval: POST /search/SearchTypeDocType with DocTypes=<ids> and
+ * the record-date range, then POST /Search/GridResults (Kendo JSON {Data, Total}). Too
+ * large a range returns "exceeded the maximum limit" while the grid still serves the
+ * previous search, so that message (or any row outside the window) marks the window
+ * truncated and it is split.
+ *
+ * @param {{ baseUrl: string, docTypeIds: readonly (string | number)[], profile: { county: string, state: string, requestIdentifierPrefix: string, baseUrl: string }, fetchImpl?: typeof fetch, now?: () => Date }} options
+ * @returns {(from: string, to: string) => Promise<{ records: Record<string, unknown>[], complete: boolean, expected: number | null }>}
+ *   Window fetcher for the shared windowed harvest.
+ */
+export function acclaimDocTypeFetcher(options) {
+  const baseUrl = options.baseUrl.replace(/\/+$/, "");
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const now = options.now ?? (() => new Date());
+  const jar = new CookieJar();
+  let accepted = false;
+  const call = async (path, body) => {
+    const response = await fetchImpl(`${baseUrl}${path}`, {
+      method: "POST",
+      redirect: "manual",
+      signal: AbortSignal.timeout(180_000),
+      headers: {
+        "user-agent": DEFAULT_USER_AGENT,
+        cookie: jar.header(),
+        "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "x-requested-with": "XMLHttpRequest",
+      },
+      body,
+    });
+    jar.store(response.headers);
+    if (response.status >= 400) throw new Error(`Acclaim ${path} returned HTTP ${response.status}`);
+    return response;
+  };
+  const us = (d) => `${d.slice(4, 6)}/${d.slice(6, 8)}/${d.slice(0, 4)}`;
+  return async (from, to) => {
+    if (!accepted) {
+      await call("/search/Disclaimer?st=/search/SearchTypeDocType", "disclaimer=true");
+      accepted = true;
+    }
+    const search = await call(
+      "/search/SearchTypeDocType?Length=6",
+      new URLSearchParams({
+        DocTypes: options.docTypeIds.join(","),
+        DocTypesDisplay_input: "",
+        DocTypesDisplay: "",
+        DateRangeList: " ",
+        RecordDateFrom: us(from),
+        RecordDateTo: us(to),
+        "X-Requested-With": "XMLHttpRequest",
+      }).toString(),
+    );
+    const html = await search.text();
+    if (/exceeded the maximum limit/i.test(html)) return { records: [], complete: false, expected: null };
+    if (/Disclaimer/i.test(search.headers.get("location") ?? "")) {
+      accepted = false;
+      throw new Error("Acclaim session lost the disclaimer");
+    }
+    const grid = await call("/Search/GridResults", "page=1&pageSize=5000&sort=&group=&filter=");
+    const body = await grid.json();
+    const rows = Array.isArray(body.Data) ? body.Data : [];
+    const lo = `${from.slice(0, 4)}/${from.slice(4, 6)}/${from.slice(6, 8)}`;
+    const hi = `${to.slice(0, 4)}/${to.slice(4, 6)}/${to.slice(6, 8)}`;
+    if (rows.some((row) => String(row.RecordDate).slice(0, 10) < lo || String(row.RecordDate).slice(0, 10) > hi)) {
+      // The grid still holds an earlier search: never save it as this window.
+      return { records: [], complete: false, expected: null };
+    }
+    if (rows.length < Number(body.Total)) return { records: [], complete: false, expected: null };
+    const capturedAt = now().toISOString();
+    return {
+      records: rows.map((row) => normalizeAcclaimGridRow(row, options.profile, capturedAt)),
+      complete: true,
+      expected: Number.isFinite(Number(body.Total)) ? Number(body.Total) : null,
+    };
+  };
+}

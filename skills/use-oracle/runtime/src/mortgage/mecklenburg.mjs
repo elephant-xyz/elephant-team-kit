@@ -19,7 +19,22 @@ import { CookieJar } from "./acclaim.mjs";
 import { formInputs } from "./harris.mjs";
 
 export const MECKLENBURG_BASE = "https://meckrod.manatron.com";
-const DOC_TYPE_LABELS = ["DEED OF TRUST", "MORTGAGE"];
+/** Default mortgage instrument labels; older (pre-conversion) records use the PRE ... D/T types. */
+export const MECKLENBURG_MORTGAGE_LABELS = Object.freeze([
+  "DEED OF TRUST",
+  "MORTGAGE",
+  "CORRECTED DEED OF TRUST",
+  "SUPPLEMENTAL DEED OF TRUST",
+  "CORRECTED MORTGAGE",
+  "MORTGAGE OF DEED",
+  // Pre-conversion (early 1990s) records: 1991-06-20 has 69 PRE D/T and 3 PRE COR D/T, 0 DEED OF TRUST.
+  "PRE D/T",
+  "PRE ADD D/T",
+  "PRE AMD D/T",
+  "PRE COR D/T",
+  "PRE SUPL D/T",
+]);
+let DOC_TYPE_LABELS = [...MECKLENBURG_MORTGAGE_LABELS];
 
 /**
  * @param {string} value - HTML.
@@ -119,11 +134,12 @@ export function parseMecklenburgResults(html, capturedAt) {
  * plain HTTP postbacks do not reproduce, so the search runs in real Chrome using the
  * page's own controls, and results pages are parsed from the rendered HTML.
  *
- * @param {{ chromePath: string, headless?: boolean, pageDelayMs?: number, timeoutMs?: number, now?: () => Date }} options
+ * @param {{ chromePath: string, headless?: boolean, docTypeLabels?: string[], pageDelayMs?: number, timeoutMs?: number, now?: () => Date }} options
  * @returns {Promise<{ fetchWindow: (from: string, to: string) => Promise<{ records: Record<string, unknown>[], complete: boolean, expected: number | null }>, close: () => Promise<void> }>}
  *   Window fetcher and a close function.
  */
 export async function openMecklenburgSession(options) {
+  if (options.docTypeLabels?.length) DOC_TYPE_LABELS = [...options.docTypeLabels];
   const { default: puppeteer } = await import("puppeteer-core");
   const timeoutMs = options.timeoutMs ?? 120_000;
   const pageDelayMs = options.pageDelayMs ?? 1_500;
