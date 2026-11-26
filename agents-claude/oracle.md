@@ -168,6 +168,10 @@ separate, and stop. Do not continue into the pipeline below.
   adjudication, or Prism-vs-NetSuite accuracy:
   `use-oracle/reference/hoa-web-ingestion.md`. Official HOA/manager identity:
   `use-oracle/reference/hoa-property-management.md`.
+- Recorded mortgages, deeds of trust or security deeds (the Mortgage data group), a
+  mortgage yield audit, or a county whose recorder is behind a CAPTCHA:
+  `mortgage-index-harvest`. Audit the county's mortgage doc-type codes first, run the
+  count-checked window harvest, and draft a records request for blocked counties.
 - Load, matching, stale rows, identity edges, or roof age: `query-db-loading-matching`.
 - Public publish: `use-oracle` and `car-publication.md` only.
 - MCP deployment or synchronization: `deploy-open-data-mcp`.

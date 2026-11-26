@@ -16,6 +16,7 @@ These moved here from [soofi-xyz/soofi-xyz-team-kit](https://github.com/soofi-xy
 
 - **County onboarding and ingestion:** `onboard-county`, `county-discovery`, `county-readiness-preflight`, `county-seed-data`, `county-appraisal-onboarding`, `county-permit-adapter`, `county-ingest-run`, `build-county-transform`, `bootstrap-oracle-infra`, `durable-workflow-builder`, `query-db-loading-matching`, `monitoring-county-ingestion`, `monitoring-oracle-ingestion`
 - **Enrichment:** `bbb-harvest`, `dbpr-license-ingest`, `sunbiz-corporate-ingest`, `overture-places-ingest`
+- **Mortgages:** `mortgage-index-harvest` (recorded mortgages, deeds of trust and security deeds from county official records)
 - **Oracle and the Elephant MCP:** `use-oracle` (with its bundled runtime under `skills/use-oracle/runtime/`), `use-elephant-mcp`, `deploy-open-data-mcp`, `migrate-elephant-cli-v2`
 - **Hero facts:** `build-elephant-hero-facts`
 - **Shared engineering skills:** `apply-engineering-guidelines`, `build-ai-agents`, `build-batch-workflows`, `integrate-ci-cd`, `babysit-release`. These are also in soofi-xyz-team-kit.

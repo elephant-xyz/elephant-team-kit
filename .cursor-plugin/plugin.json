@@ -1,7 +1,7 @@
 {
   "name": "elephant-team-kit",
   "description": "Elephant open-data agents: Oracle county mining and Atlas publication, Donphan for published county records, Watchog for elephant.xyz hero facts, plus the Elephant MCP.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": {
     "name": "Elephant XYZ"
   },
