@@ -33,6 +33,11 @@ node bin/elephant-county.mjs mortgage-window-harvest --county <key> --job-id <id
   --to <YYYYMMDD> --output data/artifacts/mortgage-window [--from <YYYYMMDD>] \
   [--window day|month|year] [--delay-ms 1500] [--with-names] [--chrome <path>]
 
+# Source documents to S3 (no local copies; resumable): duval, hillsborough
+AWS_PROFILE=<profile> node bin/elephant-county.mjs mortgage-documents --county duval \
+  --index-dir <harvest>/duval/<jobId>/windows --bucket <bucket> --limit N \
+  [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--delay-ms 2000]
+
 # One Duval instrument with its PDF (optional IPFS pin)
 node bin/elephant-county.mjs mortgage-harvest --county duval --job-id <id> \
   --instruments <csv> --limit N --output <dir> [--pin]
@@ -79,6 +84,21 @@ Texas extra codes (from each portal's own doc-type counts): Dallas `CORR DT`,
 Denton `MTG`, `MDT`, `ASSUMED MORTGAG`, `COLLATERAL MTG`, `AMENDED MORTGAG`; Collin none.
 Tarrant `DTU` is UCC filings, not mortgages. Modifications (`MODT`), releases and
 trustee deeds are deliberately excluded.
+
+## 3a. Source documents
+
+The recorded document is the source of truth. Store documents in a private S3 bucket,
+never on the operator's laptop: `s3://<bucket>/documents/<ST>/<county>/<instrument>/`
+holds `document.pdf` (or page images) and `index.json` (source URL, sha256, bytes,
+fetch time). Free document access (verified 2026-11-26): Duval full PDF (Acclaim
+`/Image/DocumentPdfAllPages`), Hillsborough watermarked PDF (`OverlayWatermark` API),
+Maricopa unofficial PDF (`/preview/pdf-link` from the recorder site, served by
+`legacy.recorder.maricopa.gov/recdocdata/unofficialpdfdocs.aspx`, real browser),
+Mecklenburg unofficial page images (LTViewer tiles, real browser), Texas full-resolution
+preview PNGs per page (signed per page through the viewer; whole PDFs are paid). Harris
+images need a County Clerk login. Full history is tens of millions of documents and
+tens of terabytes: agree the scope (covered properties, recent years, first pages) before
+a large run.
 
 ## 4. Known traps
 

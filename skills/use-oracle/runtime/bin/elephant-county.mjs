@@ -48,6 +48,7 @@ import {
 } from "../src/mortgage/harvest.mjs";
 import { pinConfigFromEnv } from "../src/mortgage/ipfs-pin.mjs";
 import { acclaimDocTypeFetcher } from "../src/mortgage/acclaim.mjs";
+import { documentFetcher, readIndexRecords, storeDocuments } from "../src/mortgage/documents.mjs";
 import { calendarWindows, harvestWindows } from "../src/mortgage/windowed-harvest.mjs";
 import { hillsboroughFetcher } from "../src/mortgage/hillsborough.mjs";
 import { maricopaFetcher } from "../src/mortgage/maricopa.mjs";
@@ -1053,6 +1054,39 @@ async function runMortgageWindowHarvestCommand(argv) {
   console.log(JSON.stringify({ event: "mortgage_window_harvest_complete", ...result }));
 }
 
+
+/**
+ * `mortgage-documents`: fetch the source documents for harvested index records and
+ * stream them to S3 (no local copies). Resumable: stored documents are skipped.
+ *
+ * @param {readonly string[]} argv - Flags after the subcommand.
+ * @returns {Promise<void>} Resolves when the batch finishes.
+ */
+async function runMortgageDocumentsCommand(argv) {
+  const flags = parseFlags(argv);
+  const profile = requireMortgageProfile(requireStringFlag(flags, "county"));
+  const limit = optionalPositiveInteger(flags.limit, "limit");
+  if (limit === null) throw new Error("mortgage-documents requires an explicit --limit bound");
+  const delayMs = typeof flags["delay-ms"] === "string" ? Number(flags["delay-ms"]) : 2000;
+  const records = await readIndexRecords(requireStringFlag(flags, "index-dir"), {
+    from: typeof flags.from === "string" ? flags.from : undefined,
+    to: typeof flags.to === "string" ? flags.to : undefined,
+  });
+  const { S3Client, PutObjectCommand, GetObjectCommand } = await import("@aws-sdk/client-s3");
+  const s3 = new S3Client({ region: typeof flags.region === "string" ? flags.region : "us-east-2" });
+  const result = await storeDocuments({
+    records,
+    fetchDocument: documentFetcher(profile.vendor, profile),
+    s3,
+    commands: { PutObjectCommand, GetObjectCommand },
+    bucket: requireStringFlag(flags, "bucket"),
+    limit,
+    delayMs,
+    onProgress: (event) => console.log(JSON.stringify(event)),
+  });
+  console.log(JSON.stringify({ event: "mortgage_documents_complete", county: profile.county, candidates: records.length, ...result }));
+}
+
 /**
  * @returns {Promise<void>} Resolves once the requested subcommand finishes.
  */
@@ -1092,6 +1126,7 @@ async function main() {
     return runPermitBulkExportCommand(rest);
   }
   if (command === "mortgage-harvest") return runMortgageHarvestCommand(rest);
+  if (command === "mortgage-documents") return runMortgageDocumentsCommand(rest);
   if (command === "mortgage-window-harvest") {
     return runMortgageWindowHarvestCommand(rest);
   }
@@ -1099,7 +1134,7 @@ async function main() {
     return runMortgageIndexHarvestCommand(rest);
   }
   console.error(
-    "Usage: elephant-county <capture-raw|ingest|reconcile-export|replay|sunbiz-prepare|sunbiz-filter|sunbiz-transform|sunbiz-enrich|avm-enrich|hoa-enrich|hoa-pm-index|hoa-pm-overlay-sync|hoa-pm-enrich|bbb-harvest|bbb-reconcile|bbb-link|enrichment-finalize|permit-probe|permit-bounded-harvest|permit-resume|permit-reconcile|permit-export|permit-bulk-export|mortgage-harvest|mortgage-index-harvest|mortgage-window-harvest> [...flags]\n" +
+    "Usage: elephant-county <capture-raw|ingest|reconcile-export|replay|sunbiz-prepare|sunbiz-filter|sunbiz-transform|sunbiz-enrich|avm-enrich|hoa-enrich|hoa-pm-index|hoa-pm-overlay-sync|hoa-pm-enrich|bbb-harvest|bbb-reconcile|bbb-link|enrichment-finalize|permit-probe|permit-bounded-harvest|permit-resume|permit-reconcile|permit-export|permit-bulk-export|mortgage-harvest|mortgage-index-harvest|mortgage-window-harvest|mortgage-documents> [...flags]\n" +
       "  capture-raw --county <key> --seed <one-row.csv> --output <temp-or-runtime-scratch-dir> [--stdout]\n" +
       "  ingest  --county <key> --seed <csv> --html-dir <dir> [--skip-validate] [--live-fetch] [--allow-empty] --output <run-dir>\n" +
       "  reconcile-export --county <key> --seed <csv> --run <run-dir> --output <working-dir> [--allow-empty]\n" +
@@ -1125,7 +1160,8 @@ async function main() {
       "  permit-bulk-export --county <profile-key> --job-id <id> --input-parquet <parquet> --input-coverage <json> --output <dir> [--max-pages N]\n" +
       "  mortgage-harvest --county <mortgage-profile-key> --job-id <id> --instruments <csv> --limit N --output <dir> [--delay-ms N] [--pin]\n" +
       "  mortgage-index-harvest --county <bexar|collin|dallas|denton|tarrant> --job-id <id> --from <YYYYMMDD> --to <YYYYMMDD> --output <dir> [--chrome <path>] [--headless] [--page-size N] [--delay-ms N] [--doc-types A,B | --extra-doc-types]\n" +
-      "  mortgage-window-harvest --county <duval|hillsborough|maricopa|harris|mecklenburg> --job-id <id> --to <YYYYMMDD> --output <dir> [--from <YYYYMMDD>] [--window day|month|year] [--delay-ms N] [--with-names] [--chrome <path>]",
+      "  mortgage-window-harvest --county <duval|hillsborough|maricopa|harris|mecklenburg> --job-id <id> --to <YYYYMMDD> --output <dir> [--from <YYYYMMDD>] [--window day|month|year] [--delay-ms N] [--with-names] [--chrome <path>]\n" +
+      "  mortgage-documents --county <duval|hillsborough> --index-dir <harvest windows dir> --bucket <s3 bucket> --limit N [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--delay-ms N] [--region us-east-2]",
   );
   process.exitCode = 1;
 }
